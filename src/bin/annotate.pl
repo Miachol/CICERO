@@ -65,7 +65,7 @@ my $optionOK = GetOptions(
 	'header'    => \$header,
 	'ref_genome=s'  => \$ref_genome,
 	'genemodel=s'		=> \$gene_model_file,
-	'blatserver' =>	\$blat_server,
+	'blatserver=s' =>	\$blat_server,
 	'blatport=s'		=> \$blat_port,
 	'min_hit_len=i'		=> \$min_hit_len,
 	'max_num_hits=i'	=> \$max_num_hits,
@@ -79,6 +79,10 @@ my $optionOK = GetOptions(
 	'known_itd_file=s'	=> \$known_itd_file,
 	'known_fusion_file=s'	=> \$known_fusion_file,
 	'j|junction_file=s' => \$junction_file,
+        'complex_region_file=s' => \$complex_region_file,
+        'gold_gene_file=s'      => \$gold_gene_file,
+        'blacklist_gene_file=s' => \$blacklist_gene_file,
+        'blacklist_fusion_file=s' => \$blacklist_fusion_file,
 	's|sample=s'		=> \$sample,
 	'h|help|?'		=> \$help,
 	'man'			=> \$man,
@@ -97,7 +101,7 @@ if (&TdtConfig::findConfig("genome", $genome)){
 	$conf = &TdtConfig::readConfig("genome", $genome); 
 }
 else{
-	croak("no config");
+	croak("no config") unless($ref_genome && -f $ref_genome && $blat_server && $blat_port && $gene_model_file && $blacklist_gene_file && $blacklist_fusion_file && $known_itd_file && $known_fusion_file && $gold_gene_file && $complex_region_file);
 }
 
 #$all_output = 1 if(!$internal);
@@ -114,7 +118,7 @@ print STDERR "blacklist_fusion_file: $blacklist_fusion_file\n";
 $known_itd_file = $conf->{KNOWN_ITD_FILE} unless($known_itd_file);
 print STDERR "KNOWN_ITD_FILE: ", $known_itd_file, "\n";
 $known_fusion_file = $conf->{KNOWN_FUSIONS} unless($known_fusion_file);
-$gold_gene_file = $conf->{CLINCLS_GOLD_GENE_LIST_FILE};
+$gold_gene_file = $conf->{CLINCLS_GOLD_GENE_LIST_FILE} unless($gold_gene_file);
 print STDERR "CLINCLS_GOLD_GENE_LIST_FILE:", $gold_gene_file, "\n";
 $excluded_chroms = $conf->{EXCLD_CHR} unless($excluded_chroms);
 $complex_region_file = $conf->{COMPLEX_REGIONS} unless($complex_region_file);
@@ -788,7 +792,7 @@ foreach my $sv (@uniq_SVs){
 	print hFo $out_string, "\n";
 }	
 close(hFo);
-rmtree(["$annotation_dir"]);
+rmtree(["$annotation_dir"]) if (!$debug);
 
 sub is_good_ITD {
 	my($bp1, $bp2) = @_;
@@ -1282,13 +1286,16 @@ sub quantification {
 	print STDERR "start mapping ... $contig_file\n" if($debug && -s $contig_file);
 	print STDERR join("\t", $chr1, $pos1, $clip1, $read_len), "\n" if($debug);
 	my $ref_chr1 = $chr1; $ref_chr1 =~ s/chr//;
-	push @mappings, $mapper->run(-QUERY => $contig_file, -scChr => $ref_chr1, -scSite=>$pos1, -CLIP=>$clip1, -READ_LEN => $read_len) if(-s $contig_file);
-	print STDERR "number of mapping: ", scalar @mappings, "\n" if($debug);
-	my $ref_chr2 = $chr2; $ref_chr2 =~ s/chr//;
-	push @mappings, $mapper->run(-QUERY => $contig_file, -scChr => $ref_chr2, -scSite=>$pos2, -CLIP=>$clip2, -READ_LEN => $read_len) if(-s $contig_file);
-	push @mappings, $mapper->run(-QUERY => $contig_file, -scChr => $ref_chr2, -scSite=>$pos2, -CLIP=>$clip2, -READ_LEN => $read_len)
-		 if(($SV->{type} eq 'Internal_dup' || !@mappings) && -s $contig_file);
-	#system("rm $fa_file.cap.*");
+	my $mapping = $mapper->run(-QUERY => $contig_file, -scChr => $ref_chr1, -scSite=>$pos1, -CLIP=>$clip1, -READ_LEN => $read_len) if(-s $contig_file);
+	if (-s $mapping){
+		push @mappings, $mapper->process_mappings(-QUERY => $contig_file, -scChr => $ref_chr1, -scSite=>$pos1, -CLIP=>$clip1, -READ_LEN => $read_len) if(-s $contig_file);
+		print STDERR "number of mapping: ", scalar @mappings, "\n" if($debug);
+		my $ref_chr2 = $chr2; $ref_chr2 =~ s/chr//;
+		push @mappings, $mapper->process_mappings(-QUERY => $contig_file, -scChr => $ref_chr2, -scSite=>$pos2, -CLIP=>$clip2, -READ_LEN => $read_len) if(-s $contig_file);
+		push @mappings, $mapper->process_mappings(-QUERY => $contig_file, -scChr => $ref_chr2, -scSite=>$pos2, -CLIP=>$clip2, -READ_LEN => $read_len)
+			 if(($SV->{type} eq 'Internal_dup' || !@mappings) && -s $contig_file);
+		#system("rm $fa_file.cap.*");
+	}
 
 	my @qSVs;
 	foreach my $sv (@mappings){

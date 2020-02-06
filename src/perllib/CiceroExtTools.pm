@@ -150,6 +150,25 @@ sub run {
 	print STDERR "\ntest=$test\t", join(" ", ($self->{PRG}, $self->{BIT2_DIR}, $param{-QUERY}, $unsorted_psl, $options)), "\n" if($debug);
 	`sort -k 11,11nr -k 10,10d -k 14,14d -k 1,1nr $unsorted_psl -o $psl_file`;
 
+	return $psl_file
+}
+
+sub process_mappings {
+	my $self = shift;
+	my %param = @_;
+	croak "Missing QUERY parameter for $self->{PRG}" if(!$param{-QUERY});
+	my $contig_file = $param{-QUERY};
+	my $unsorted_psl = "$contig_file.unsorted.psl";
+	my $psl_file = "$contig_file.psl";
+	my $options = $param{-OPTIONS} || $self->{OPTIONS};
+	my $sc_chr = $param{-scChr};
+	my $sc_site = $param{-scSite};
+	my $clip = $param{-CLIP};
+	my $read_len = $param{-READ_LEN};
+	my $tentative_anchor = $param{-anchorBP} || "0:0";
+
+	my $debug = 1; 
+
 	my $contig_seqs = read_fa_file($contig_file);	
 	my ($bad_contigs,$SC_mapped_contigs, $best_matches) = $self->remove_artificial_contigs( -QUERY => $contig_file, -scChr => $sc_chr, -scSite=>$sc_site, -CLIP=>$clip, -READ_LEN => $read_len);
 	my ($n_ctg, $n_bad_ctg, $n_SC_ctg) = (scalar (keys %{$contig_seqs}), scalar (keys %{$bad_contigs}), scalar (keys %{$SC_mapped_contigs}));
